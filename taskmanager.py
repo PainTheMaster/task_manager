@@ -4,10 +4,10 @@ import json
 import math
 
 
-key_ss = "SS"
-key_sf = "SF"
-key_fs = "FS"
-key_ff = "FF"
+key_ss = "SS"   #The task starts when the depending task starts
+key_sf = "SF"   #The task finishes when the depending task starts
+key_fs = "FS"   #The task starts when the depending task finishes
+key_ff = "FF"   #The task finishes when the depending task finishes
 
 idx_deping = 0
 idx_depded = 1
@@ -22,18 +22,214 @@ class Task:
                  cat_id:str|Literal['G','T', 'M', 'Q', 'C']|None,
                  num_id:int|None,
                  owner:str|list[str]|None,
-                 date_start:str|date|None,
-                 date_end:str|date|None,
+                 date_start:date|None,
+                 date_end:date|None,
                  num_duration:int|None,
-                 unit_duration: Literal['day','week','month','year','wkg_day']|None
+                 unit_duration: Literal['day','week','month','year','wkg_day']|None,
+                 dep_start:Task|None=None,
+                 typ_dep_start:Literal['SS', 'FS']|None=None,
+                 lag_start:int=0,
+                 dep_fin:Task|None=None,
+                 typ_dep_fin:Literal['SF','FF']|None=None,
+                 preempt_fin:int=0,
+                 description:str|None=None
                  ):
-        self.name = name
-        pass
+        if not name:
+            raise ValueError("Task name cannot be empty.")
+        else:
+            self.name = name
+
+        if not cat_id:
+            raise ValueError("Task category ID cannot be empty.")
+        else:
+            self.cat_id = cat_id
+
+        if not num_id:
+            raise ValueError("Task number ID cannot be empty.")
+        else:
+            self.num_id = num_id
+
+        if not owner:
+            raise ValueError("Task owner cannot be empty.")
+        else:
+            self.owner = owner
+
+        self.date_start = date_start
+        self.date_start_calcd:date = None
+        self.date_end = date_end
+        self.date_end_calcd:date = None
+        self.num_duration = num_duration
+        self.unit_duration = unit_duration
+        self.days_needed:timedelta = None
+        if self.num_duration and self.unit_duration:
+            if self.unit_duration == 'day':
+                self.days_needed = timedelta(days=self.num_duration)
+            elif self.unit_duration == 'week':
+                self.days_needed = timedelta(days=self.num_duration * 7)
+            elif self.unit_duration == 'month':
+                self.days_needed = timedelta(days=self.num_duration * 30)
+            elif self.unit_duration == 'year':
+                self.days_needed = timedelta(days=self.num_duration * 365)
+            elif self.unit_duration == 'wkg_day':
+                self.days_needed = timedelta(days=(self.num_duration//5)*7 + self.num_duration%5)
+
+        self.dep_start = dep_start
+        if dep_start and not typ_dep_start:
+            raise ValueError("Dependency type for start cannot be empty when start dependency name is provided.")
+        elif dep_start is None and typ_dep_start:
+            raise ValueError("Start dependency cannot be empty when dependency type is provided.")
+        elif typ_dep_start != key_ss and typ_dep_start != key_fs:
+            raise ValueError("Invalid dependency type for start. Must be 'SS' or 'FS'.")
+        else:
+            self.typ_dep_start = typ_dep_start
+
+        self.delay_start = timedelta(days=lag_start)
+
+        self.dep_fin = dep_fin
+        if dep_fin and not typ_dep_fin:
+            raise ValueError("Dependency type for finish cannot be empty when finish dependency name is provided.")
+        elif dep_fin is None and typ_dep_fin:
+            raise ValueError("Finish dependency cannot be empty when dependency type is provided.")
+        elif typ_dep_fin != key_ff and typ_dep_fin != key_sf:
+            raise ValueError("Invalid dependency type for finish. Must be 'FF' or 'SF'.")
+        else:
+            self.typ_dep_fin = typ_dep_fin
+
+        self.preempt_fin = timedelta(days=preempt_fin)
+
+        self.description = description
+        self.start_determined = False
+        self.fin_determined = False
+        self.flag_delay = False
 
 
+    # def calc_date(self):
+    #     #Calculate the start date based on start dependencies
+    #     if self.typ_dep_start == key_ss:
+    #         if self.dep_start.date_start:
+    #             self.date_start = self.dep_start.date_start+self.delay_start
+    #             self.start_determined = True
+    #         else:
+    #             self.date_start = None
+    #             self.start_determined = False
+    #     elif self.typ_dep_start == key_fs and self.dep_start.date_end:
+    #         if self.dep_start.date_end:
+    #             self.date_start = self.dep_start.date_end+self.delay_start
+    #             self.start_determined = True
+    #         else:
+    #             self.date_start = None
+    #             self.start_determined = False
+    #     #Calculate the start date based on finish dependencies (backcasting)
+    #     else:
+    #         if self.typ_dep_fin ==key_sf and self.dep_fin.date_start:
+    #             if self.duration_days:
+    #                 temp_date_start = self.dep_fin.date_start-self.duration_days - self.preempt_fin
+    #                 if self.date_start is None or temp_date_start < self.date_start:
+    #                     self.date_start = temp_date_start
+    #                 else:
+    #                     # Begins earlier than needed. No need to change.
+    #                     pass
+    #                 self.start_determined = True
+    #             elif self.date_start:
+    #                 self.start_determined = True
+    #             else:
+    #                 self.start_determined = False
+    #                 raise ValueError(f'Task-"{self.name}": Cannot determine start date based on finish dependency. No duration is specified for dependency type "SF".')
+    #         elif self.typ_dep_fin == key_ff and self.dep_fin and self.dep_fin.date_end:
+    #             if self.duration_days:
+    #                 temp_date_start = self.dep_fin.date_end-self.duration_days - self.preempt_fin
+    #                 if self.date_start is None or temp_date_start < self.date_start:
+    #                     self.date_start = temp_date_start
+    #                 else:
+    #                     # Begins earlier than needed. No need to change.
+    #                     pass
+    #                 self.start_determined = True
+    #             elif self.date_start:
+    #                 self.start_determined = True
+    #             else:
+    #                 self.start_determined = False
+    #                 raise ValueError(f'Task-"{self.name}": Cannot determine start date based on finish dependency. No duration is specified for dependency type "FF".')
+    #         else:
+    #             pass
 
+        
+    #     if self.typ_dep_fin == key_sf and self.dep_fin.date_start:
+    #         self.date_fin = self.dep_fin.date_start
+    #         self.fin_determined = True
 
+    def calc_dates(self) -> tuple[bool, bool]:
+        prim_start:date = None
+        prim_fin:date = None
 
+        #start
+        if self.date_start:
+            prim_start = self.date_start
+        if self.typ_dep_start == key_ss:
+            if self.dep_start.date_start:
+                temp_prim_start = self.dep_start.date_start + self.delay_start
+                if prim_start is None or temp_prim_start < prim_start:
+                    prim_start = temp_prim_start
+            else:
+                prim_start = None
+        elif self.typ_dep_start == key_fs:
+            if self.dep_start.date_end:
+                temp_prim_start = self.dep_start.date_end + self.delay_start
+                if prim_start is None or temp_prim_start < prim_start:
+                    prim_start = temp_prim_start
+            else:
+                prim_start = None
+
+        #end
+        if self.date_end:
+            prim_fin = self.date_end
+        if self.typ_dep_fin == key_sf:
+            if self.dep_fin.date_start:
+                temp_prim_fin = self.dep_fin.date_start - self.preempt_fin
+                if prim_fin is None or prim_fin < temp_prim_fin:    #次のタスクが始まるまで長く続けないといけない場合。
+                    prim_fin = temp_prim_fin
+            else:
+                prim_fin = None
+        if self.typ_dep_fin == key_ff:
+            if self.dep_fin.date_end:
+                temp_prim_fin = self.dep_fin.date_end - self.preempt_fin
+                if prim_fin is None or prim_fin < temp_prim_fin:
+                    prim_fin = temp_prim_fin
+            else:
+                prim_fin = None
+
+        if self.days_needed and prim_start:
+            temp_prim_fin = prim_start + self.days_needed
+            if prim_fin is None or prim_fin < temp_prim_fin:
+                prim_fin = temp_prim_fin
+
+        changed:bool=False
+        if self.date_start_calcd != prim_start or self.date_end_calcd != prim_fin:
+            changed = True
+
+        self.date_start_calcd = prim_start
+        self.date_end_calcd = prim_fin
+
+        determined:bool = False
+        if self.date_start_calcd is not None and self.date_end_calcd is not None:
+            determined = True
+
+        #consistency check
+        if self.typ_dep_start == key_fs  and self.dep_start.date_end and self.date_start:
+            if self.date_start < self.dep_start.date_end:
+                self.flag_delay = True
+            else:
+                self.flag_delay = False
+        else:
+            self.flag_delay = False
+        if self.typ_dep_start == key_ss and self.dep_start.date_start and self.date_start:
+            if self.date_start < self.dep_start.date_start:
+                self.flag_delay = True
+            else:
+                self.flag_delay = False
+        else:
+            self.flag_delay = False
+        
+        return (changed, determined)
 
 
 class Gantt:
@@ -127,6 +323,8 @@ class Gantt:
 
         for task in self.tasks:
             task.id = f"{task.cat_id}{task.num_id:0{id_digit}d}"
+
+        
 
 
 
