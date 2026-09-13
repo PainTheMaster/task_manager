@@ -74,7 +74,10 @@ class Task:
                 self.days_needed = timedelta(days=(self.num_duration//5)*7 + self.num_duration%5)
 
         self.dep_start = dep_start
-        if dep_start and not typ_dep_start:
+        if dep_start is None and typ_dep_start is None:
+            self.dep_start = None
+            self.typ_dep_start = None
+        elif dep_start and not typ_dep_start:
             raise ValueError("Dependency type for start cannot be empty when start dependency name is provided.")
         elif dep_start is None and typ_dep_start:
             raise ValueError("Start dependency cannot be empty when dependency type is provided.")
@@ -83,10 +86,13 @@ class Task:
         else:
             self.typ_dep_start = typ_dep_start
 
-        self.delay_start = timedelta(days=lag_start)
+        self.lag_start = timedelta(days=lag_start)
 
         self.dep_fin = dep_fin
-        if dep_fin and not typ_dep_fin:
+        if dep_fin is None and typ_dep_fin is None:
+            self.dep_fin = None
+            self.typ_dep_fin = None
+        elif dep_fin and not typ_dep_fin:
             raise ValueError("Dependency type for finish cannot be empty when finish dependency name is provided.")
         elif dep_fin is None and typ_dep_fin:
             raise ValueError("Finish dependency cannot be empty when dependency type is provided.")
@@ -103,60 +109,6 @@ class Task:
         self.flag_delay = False
 
 
-    # def calc_date(self):
-    #     #Calculate the start date based on start dependencies
-    #     if self.typ_dep_start == key_ss:
-    #         if self.dep_start.date_start:
-    #             self.date_start = self.dep_start.date_start+self.delay_start
-    #             self.start_determined = True
-    #         else:
-    #             self.date_start = None
-    #             self.start_determined = False
-    #     elif self.typ_dep_start == key_fs and self.dep_start.date_end:
-    #         if self.dep_start.date_end:
-    #             self.date_start = self.dep_start.date_end+self.delay_start
-    #             self.start_determined = True
-    #         else:
-    #             self.date_start = None
-    #             self.start_determined = False
-    #     #Calculate the start date based on finish dependencies (backcasting)
-    #     else:
-    #         if self.typ_dep_fin ==key_sf and self.dep_fin.date_start:
-    #             if self.duration_days:
-    #                 temp_date_start = self.dep_fin.date_start-self.duration_days - self.preempt_fin
-    #                 if self.date_start is None or temp_date_start < self.date_start:
-    #                     self.date_start = temp_date_start
-    #                 else:
-    #                     # Begins earlier than needed. No need to change.
-    #                     pass
-    #                 self.start_determined = True
-    #             elif self.date_start:
-    #                 self.start_determined = True
-    #             else:
-    #                 self.start_determined = False
-    #                 raise ValueError(f'Task-"{self.name}": Cannot determine start date based on finish dependency. No duration is specified for dependency type "SF".')
-    #         elif self.typ_dep_fin == key_ff and self.dep_fin and self.dep_fin.date_end:
-    #             if self.duration_days:
-    #                 temp_date_start = self.dep_fin.date_end-self.duration_days - self.preempt_fin
-    #                 if self.date_start is None or temp_date_start < self.date_start:
-    #                     self.date_start = temp_date_start
-    #                 else:
-    #                     # Begins earlier than needed. No need to change.
-    #                     pass
-    #                 self.start_determined = True
-    #             elif self.date_start:
-    #                 self.start_determined = True
-    #             else:
-    #                 self.start_determined = False
-    #                 raise ValueError(f'Task-"{self.name}": Cannot determine start date based on finish dependency. No duration is specified for dependency type "FF".')
-    #         else:
-    #             pass
-
-        
-    #     if self.typ_dep_fin == key_sf and self.dep_fin.date_start:
-    #         self.date_fin = self.dep_fin.date_start
-    #         self.fin_determined = True
-
     def calc_dates(self) -> tuple[bool, bool]:
         prim_start:date = None
         prim_fin:date = None
@@ -166,14 +118,14 @@ class Task:
             prim_start = self.date_start
         if self.typ_dep_start == key_ss:
             if self.dep_start.date_start:
-                temp_prim_start = self.dep_start.date_start + self.delay_start
+                temp_prim_start = self.dep_start.date_start + self.lag_start
                 if prim_start is None or temp_prim_start < prim_start:
                     prim_start = temp_prim_start
             else:
                 prim_start = None
         elif self.typ_dep_start == key_fs:
             if self.dep_start.date_end:
-                temp_prim_start = self.dep_start.date_end + self.delay_start
+                temp_prim_start = self.dep_start.date_end + self.lag_start
                 if prim_start is None or temp_prim_start < prim_start:
                     prim_start = temp_prim_start
             else:
@@ -214,21 +166,23 @@ class Task:
             determined = True
 
         #consistency check
-        if self.typ_dep_start == key_fs  and self.dep_start.date_end and self.date_start:
-            if self.date_start < self.dep_start.date_end:
-                self.flag_delay = True
+        if self.typ_dep_start == key_fs:
+            if self.dep_start.date_end and self.date_start:
+                if self.date_start < self.dep_start.date_end:
+                    self.flag_delay = True
+                else:
+                    self.flag_delay = False
             else:
                 self.flag_delay = False
-        else:
-            self.flag_delay = False
-        if self.typ_dep_start == key_ss and self.dep_start.date_start and self.date_start:
-            if self.date_start < self.dep_start.date_start:
-                self.flag_delay = True
+        elif self.typ_dep_start == key_ss:
+            if self.dep_start.date_start and self.date_start:
+                if self.date_start < self.dep_start.date_start:
+                    self.flag_delay = True
+                else:
+                    self.flag_delay = False
             else:
                 self.flag_delay = False
-        else:
-            self.flag_delay = False
-        
+            
         return (changed, determined)
 
 
