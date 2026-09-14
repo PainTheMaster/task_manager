@@ -23,7 +23,7 @@ class Task:
                  num_id:int|None,
                  owner:str|list[str]|None,
                  date_start:date|None,
-                 date_end:date|None,
+                 date_fin:date|None,
                  num_duration:int|None,
                  unit_duration: Literal['day','week','month','year','wkg_day']|None,
                  dep_start:Task|None=None,
@@ -49,6 +49,8 @@ class Task:
         else:
             self.num_id = num_id
 
+        self.id:str = None
+
         if not owner:
             raise ValueError("Task owner cannot be empty.")
         else:
@@ -56,22 +58,22 @@ class Task:
 
         self.date_start = date_start
         self.date_start_calcd:date = None
-        self.date_end = date_end
-        self.date_end_calcd:date = None
-        self.num_duration = num_duration
+        self.date_fin = date_fin
+        self.date_fin_calcd:date = None
+        self.num_duration_need = num_duration
         self.unit_duration = unit_duration
-        self.days_needed:timedelta = None
-        if self.num_duration and self.unit_duration:
+        self.cal_days_needed:timedelta = None
+        if self.num_duration_need and self.unit_duration:
             if self.unit_duration == 'day':
-                self.days_needed = timedelta(days=self.num_duration)
+                self.cal_days_needed = timedelta(days=self.num_duration_need)
             elif self.unit_duration == 'week':
-                self.days_needed = timedelta(days=self.num_duration * 7)
+                self.cal_days_needed = timedelta(days=self.num_duration_need * 7)
             elif self.unit_duration == 'month':
-                self.days_needed = timedelta(days=self.num_duration * 30)
+                self.cal_days_needed = timedelta(days=self.num_duration_need * 30)
             elif self.unit_duration == 'year':
-                self.days_needed = timedelta(days=self.num_duration * 365)
+                self.cal_days_needed = timedelta(days=self.num_duration_need * 365)
             elif self.unit_duration == 'wkg_day':
-                self.days_needed = timedelta(days=(self.num_duration//5)*7 + self.num_duration%5)
+                self.cal_days_needed = timedelta(days=(self.num_duration_need//5)*7 + self.num_duration_need%5)
 
         self.dep_start = dep_start
         if dep_start is None and typ_dep_start is None:
@@ -104,8 +106,8 @@ class Task:
         self.preempt_fin = timedelta(days=preempt_fin)
 
         self.description = description
-        self.start_determined = False
-        self.fin_determined = False
+        self.is_start_determined = False
+        self.is_fin_determined = False
         self.flag_delay = False
 
 
@@ -119,21 +121,23 @@ class Task:
         if self.typ_dep_start == key_ss:
             if self.dep_start.date_start:
                 temp_prim_start = self.dep_start.date_start + self.lag_start
-                if prim_start is None or temp_prim_start < prim_start:
-                    prim_start = temp_prim_start
+                prim_start = temp_prim_start
+                # if prim_start is None or temp_prim_start < prim_start:
+                #     prim_start = temp_prim_start
             else:
                 prim_start = None
         elif self.typ_dep_start == key_fs:
-            if self.dep_start.date_end:
-                temp_prim_start = self.dep_start.date_end + self.lag_start
-                if prim_start is None or temp_prim_start < prim_start:
-                    prim_start = temp_prim_start
+            if self.dep_start.date_fin:
+                temp_prim_start = self.dep_start.date_fin + self.lag_start
+                prim_start = temp_prim_start
+                # if prim_start is None or temp_prim_start < prim_start:
+                #     prim_start = temp_prim_start
             else:
                 prim_start = None
 
         #end
-        if self.date_end:
-            prim_fin = self.date_end
+        if self.date_fin:
+            prim_fin = self.date_fin
         if self.typ_dep_fin == key_sf:
             if self.dep_fin.date_start:
                 temp_prim_fin = self.dep_fin.date_start - self.preempt_fin
@@ -142,48 +146,100 @@ class Task:
             else:
                 prim_fin = None
         if self.typ_dep_fin == key_ff:
-            if self.dep_fin.date_end:
-                temp_prim_fin = self.dep_fin.date_end - self.preempt_fin
+            if self.dep_fin.date_fin:
+                temp_prim_fin = self.dep_fin.date_fin - self.preempt_fin
                 if prim_fin is None or prim_fin < temp_prim_fin:
                     prim_fin = temp_prim_fin
             else:
                 prim_fin = None
 
-        if self.days_needed and prim_start:
-            temp_prim_fin = prim_start + self.days_needed
+        if self.cal_days_needed and prim_start:
+            temp_prim_fin = prim_start + self.cal_days_needed
             if prim_fin is None or prim_fin < temp_prim_fin:
                 prim_fin = temp_prim_fin
 
         changed:bool=False
-        if self.date_start_calcd != prim_start or self.date_end_calcd != prim_fin:
+        if self.date_start_calcd != prim_start or self.date_fin_calcd != prim_fin:
             changed = True
 
         self.date_start_calcd = prim_start
-        self.date_end_calcd = prim_fin
+        self.date_fin_calcd = prim_fin
+
+        
+        if self.date_start_calcd is not None:
+            self.is_start_determined = True
+        else:
+            self.is_start_determined = False
+        if self.date_fin_calcd is not None:
+            self.is_fin_determined = True
+        else:
+            self.is_fin_determined = False
 
         determined:bool = False
-        if self.date_start_calcd is not None and self.date_end_calcd is not None:
+        if self.is_start_determined and self.is_fin_determined:
             determined = True
+        else:
+            determined = False
 
         #consistency check
+        start_flag:bool = False
+        fin_flag:bool = False
         if self.typ_dep_start == key_fs:
-            if self.dep_start.date_end and self.date_start:
-                if self.date_start < self.dep_start.date_end:
-                    self.flag_delay = True
+            if self.dep_start.date_fin and self.date_start:
+                if self.date_start < self.dep_start.date_fin:
+                    start_flag = True
                 else:
-                    self.flag_delay = False
+                    start_flag = False
             else:
-                self.flag_delay = False
+                start_flag = False
         elif self.typ_dep_start == key_ss:
             if self.dep_start.date_start and self.date_start:
                 if self.date_start < self.dep_start.date_start:
-                    self.flag_delay = True
+                    start_flag = True
                 else:
-                    self.flag_delay = False
+                    start_flag = False
             else:
-                self.flag_delay = False
-            
+                start_flag = False
+        if self.date_fin and self.date_fin_calcd:
+            if self.date_fin < self.date_fin_calcd:
+                fin_flag = True
+            else:
+                fin_flag = False
+
+        self.flag_delay = start_flag or fin_flag
+        
         return (changed, determined)
+
+
+    def task_to_dict(self):
+        return {
+            "name": self.name,
+            "id": self.id,
+            "owner": self.owner,
+            "date_start_calcd":self.date_start_calcd.isoformat(),
+            "date_fin_calcd":self.date_fin_calcd.isoformat(),
+            "calender_days_needed": self.cal_days_needed.days,
+            "name_dependency_start": self.dep_start.name,
+            "id_dependency_start": self.dep_start.id,
+            "typ_start": self.typ_dep_start,
+            "lag_start": self.lag_start.days,
+            "name_dependency_fin": self.dep_fin.name,
+            "id_dependency_fin": self.dep_fin.id,
+            "typ_fin": self.typ_dep_fin,
+            "preempt_fin": self.preempt_fin.days,
+            "description": self.description,
+            "delay":self.flag_delay,
+            
+            "details":{
+                "cat_id":self.cat_id,
+                "num_id":self.num_id,
+                "num_duration_needed":self.num_duration_need,
+                "unit_duration":self.unit_duration,
+                "start_determined": self.is_start_determined,
+                "fin_determined": self.is_fin_determined,
+            }
+        }
+            
 
 
 class Gantt:
@@ -207,7 +263,7 @@ class Gantt:
                  num_id:int|None,
                  owner:str|list[str]|None,
                  date_start:str|date|None,
-                 date_end:str|date|None,
+                 date_fin:str|date|None,
                  num_duration:int|None,
                  unit_duration: Literal['day','week','month','year','wkg_day']|None,
                  name_dep_start:str|None,
@@ -234,7 +290,7 @@ class Gantt:
                         num_id=num_id,
                         owner=owner,
                         date_start=date_start,
-                        date_end=date_end,
+                        date_fin=date_fin,
                         num_duration=num_duration,
                         unit_duration=unit_duration)
             self.tasks.append(task)
@@ -245,7 +301,7 @@ class Gantt:
                             num_id=num_id,
                             owner=o,
                             date_start=date_start,
-                            date_end=date_end,
+                            date_fin=date_fin,
                             num_duration=num_duration,
                             unit_duration=unit_duration)
                 self.tasks.append(task)
