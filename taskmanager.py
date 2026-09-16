@@ -1,5 +1,6 @@
 from datetime import date, timedelta
 from typing import Literal
+from collections import namedtuple
 import json
 import math
 
@@ -9,11 +10,10 @@ key_sf = "SF"   #The task finishes when the depending task starts
 key_fs = "FS"   #The task starts when the depending task finishes
 key_ff = "FF"   #The task finishes when the depending task finishes
 
-idx_deping = 0
-idx_depded = 1
-idx_deptyp = 2
 
 id_digit_default = 4
+
+dependency = namedtuple('dependency', ['name_this', 'name_dep', 'typ_dep'])
 
 
 class Task:
@@ -32,7 +32,8 @@ class Task:
                  dep_fin:Task|None=None,
                  typ_dep_fin:Literal['SF','FF']|None=None,
                  preempt_fin:int=0,
-                 description:str|None=None
+                 description:str|None=None,
+                 is_sub:bool=False
                  ):
         if not name:
             raise ValueError("Task name cannot be empty.")
@@ -106,6 +107,10 @@ class Task:
         self.preempt_fin = timedelta(days=preempt_fin)
 
         self.description = description
+
+        self.is_sub = is_sub
+        self.circular_start_ok = False
+        self.circular_fin_ok = False
         self.is_start_determined = False
         self.is_fin_determined = False
         self.flag_delay = False
@@ -210,6 +215,19 @@ class Task:
         
         return (changed, determined)
 
+    def register_dependecy(self, dependency:Task, typ_dep:str):
+        if typ_dep == key_ss or typ_dep == key_fs:
+            self.dep_start = dependency
+            self.typ_dep_start = typ_dep
+        elif typ_dep == key_sf or typ_dep == key_ff:
+            self.dep_fin = dependency
+            self.typ_dep_fin = typ_dep
+
+
+    def check_circular(self):
+        
+
+
 
     def task_to_dict(self):
         return {
@@ -228,8 +246,8 @@ class Task:
             "typ_fin": self.typ_dep_fin,
             "preempt_fin": self.preempt_fin.days,
             "description": self.description,
-            "delay":self.flag_delay,
-            
+            "flag_delay":self.flag_delay,
+
             "details":{
                 "cat_id":self.cat_id,
                 "num_id":self.num_id,
@@ -243,6 +261,8 @@ class Task:
 
 
 class Gantt:
+    #dependency = namedtuple('dependecy', ['name_this', 'name_dep', 'typ_dep'])
+
     def __init__(self, name:str):
         self.name = name
         self.tasks = []
@@ -252,8 +272,11 @@ class Gantt:
                                              'Q':-1,
                                              'C':-1,
                                             }
-        self.dep_start:list[tuple[str, str, str]] = []  
-        self.dep_fin = [tuple[str, str, str]] = []
+
+        #tuple_dep_fin = (name, name_dep_fin, typ_dep_fin)
+        # self.dependency = namedtuple('dependecy', ['name_this', 'name_dep'])
+        self.dep_start:list[dependency] = []  
+        self.dep_fin: list[dependency] = []
 
 
 
@@ -267,9 +290,12 @@ class Gantt:
                  num_duration:int|None,
                  unit_duration: Literal['day','week','month','year','wkg_day']|None,
                  name_dep_start:str|None,
-                 typ_dep_start:Literal['SS','SF','FS','FF']|None,
+                 typ_dep_start:Literal['SS', 'FS']|None,
+                 lag_start:int|None,
                  name_dep_fin:str|None,
-                 typ_dep_fin:Literal['SS','SF','FS','FF']|None,
+                 typ_dep_fin:Literal['SF', 'FF']|None,
+                 preempt_fin:int|None,
+                 description:str|None=None
                  ):
         if not name:
             raise ValueError("Task name cannot be empty.")
@@ -292,9 +318,15 @@ class Gantt:
                         date_start=date_start,
                         date_fin=date_fin,
                         num_duration=num_duration,
-                        unit_duration=unit_duration)
+                        unit_duration=unit_duration,
+                        lag_start=lag_start,
+                        preempt_fin=preempt_fin,
+                        description=description,
+                        is_sub=False
+                        )
             self.tasks.append(task)
         else:
+            isSub = False
             for o in owner:
                 task = Task(name=name,
                             cat_id=cat_id,
@@ -303,24 +335,41 @@ class Gantt:
                             date_start=date_start,
                             date_fin=date_fin,
                             num_duration=num_duration,
-                            unit_duration=unit_duration)
+                            unit_duration=unit_duration,
+                            lag_start=lag_start,
+                            preempt_fin=preempt_fin,
+                            description=description,
+                            is_sub=isSub)
+                isSub = True
                 self.tasks.append(task)
 
         if name_dep_start is not None:
             if typ_dep_start is None:
                 raise ValueError("Dependency type for start cannot be empty when start dependency name is provided.")
             else:
-                tuple_dep_start = (name, name_dep_start, typ_dep_start)
+                #tuple_dep_start = (name, name_dep_start, typ_dep_start)
+                tuple_dep_start = dependency(name_this=name, name_dep=name_dep_start, typ_dep=typ_dep_start)
                 self.dep_start.append(tuple_dep_start)
 
         if name_dep_fin is not None:
             if typ_dep_fin is None:
                 raise ValueError("Dependency type for finish cannot be empty when finish dependency name is provided.")
             else:
-                tuple_dep_fin = (name, name_dep_fin, typ_dep_fin)
+                tuple_dep_fin = dependency(name_this=name, name_dep=name_dep_fin, typ_dep=typ_dep_fin)
                 self.dep_fin.append(tuple_dep_fin)
 
+    def find_by_name(self, name_dep:str)->Task:
+        for task in self.tasks:
+            if task.name == name_dep and not task.is_sub:
+                return task
+        return None
 
+
+    def check_circular(self, task_this:Task):
+        list_checked:list[Task]=[task_this]
+        if not task_this.circular_start_ok:
+            pass
+        pass
 
     def link(self):
         max = -1
@@ -330,10 +379,25 @@ class Gantt:
         id_digit = math.floor(math.log10(max))+1
         if id_digit < id_digit_default:
             id_digit = id_digit_default
-
         for task in self.tasks:
             task.id = f"{task.cat_id}{task.num_id:0{id_digit}d}"
 
+        for dep in self.dep_start:
+            task_this = self.find_by_name(dep.name_this)
+            task_dep = self.find_by_name(dep.name_dep)
+            if task_dep is None:
+                raise ValueError(f'Task name="{task_this.name}", ID="{task_this.id}": Dependency to start "{dep.name_dep}" not found.')
+            task_this.register_dependecy(dependency=task_dep, typ_dep=dep.typ_dep)
+
+        for dep in self.dep_fin:
+            task_this = self.find_by_name(dep.name_this)
+            task_dep = self.find_by_name(dep.name_dep)
+            if task_dep is None:
+                raise ValueError(f'Task name="{task_this.name}", ID="{task_this.id}": Dependency to finish "{dep.name_dep}" not found.')
+            task_this.register_dependecy(dependency=task_dep, typ_dep=dep.typ_dep)
+
+
+    
         
 
 
