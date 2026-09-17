@@ -139,6 +139,9 @@ class Task:
                 #     prim_start = temp_prim_start
             else:
                 prim_start = None
+        else:
+            if self.date_start is None:
+                raise RuntimeError(f'Task "{self.name}": The task has neither a dependency nor a starting date.')
 
         #end
         if self.date_fin:
@@ -150,13 +153,17 @@ class Task:
                     prim_fin = temp_prim_fin
             else:
                 prim_fin = None
-        if self.typ_dep_fin == key_ff:
+        elif self.typ_dep_fin == key_ff:
             if self.dep_fin.date_fin:
                 temp_prim_fin = self.dep_fin.date_fin - self.preempt_fin
                 if prim_fin is None or prim_fin < temp_prim_fin:
                     prim_fin = temp_prim_fin
             else:
                 prim_fin = None
+        else:
+            if self.date_fin is None:
+                raise RuntimeError(f'Task "{self.name}": The task has neither a dependency nor a finishing date.')
+
 
         if self.cal_days_needed and prim_start:
             temp_prim_fin = prim_start + self.cal_days_needed
@@ -225,9 +232,38 @@ class Task:
 
 
     def check_circular(self):
-        
+        if self.circular_start_ok and self.circular_fin_ok:
+            return
 
+        checked:list[Task] = [self]
+        focus:Task = self
+        while True:
+            focus = focus.dep_start
+            checked.append(focus)
+            if focus is None:
+                break
+            elif focus == self:
+                circle = self.__list_linerize(checked)
+                raise RuntimeWarning(f'Circular referencing in dependency series for starting:\n{circle}')
+            else:
+                focus.circular_start_ok = True
+        focus = self
+        while True:
+            focus = focus.dep_fin
+            checked.append(focus)
+            if focus is None:
+                break
+            elif focus == self:
+                circle = self.__list_linerize(checked)
+                raise RuntimeWarning(f'Circular referencing in dependency series for starting:\n{circle}')
+            else:
+                focus.circula_fin_ok = True
 
+    def __list_linerize(list_str:list[str])->str:
+        linearized:str=f'"{list_str[0]}"'
+        for i in range(1, len(list_str),1):
+            linearized += f'->"{list_str[i]}"'
+        return linearized
 
     def task_to_dict(self):
         return {
@@ -265,7 +301,7 @@ class Gantt:
 
     def __init__(self, name:str):
         self.name = name
-        self.tasks = []
+        self.tasks:list[Task] = []
         self.counter_dict: dict[str, int]= {'G':-1,
                                              'T':-1,
                                              'M':-1,
@@ -372,7 +408,7 @@ class Gantt:
         pass
 
     def link(self):
-        max = -1
+        max = 1
         for cat in self.counter_dict:
             if self.counter_dict[cat] > max:
                 max = self.counter_dict[cat]
@@ -396,6 +432,35 @@ class Gantt:
                 raise ValueError(f'Task name="{task_this.name}", ID="{task_this.id}": Dependency to finish "{dep.name_dep}" not found.')
             task_this.register_dependecy(dependency=task_dep, typ_dep=dep.typ_dep)
 
+        for task in self.tasks:
+            task.check_circular()
+
+        changed = True
+        determined = False
+        while changed or not determined:
+            changed = False
+            determined = True
+            for task in self.tasks:
+                changed_this, deteremined_this = task.calc_dates()
+                changed |= changed_this
+                determined &= deteremined_this
+            if not changed and not determined:
+                raise RuntimeError('Not a deterministic plan.')
+
+        tasks:list[dict]=[]
+        for task in self.tasks:
+            tasks.append(task.task_to_dict())
+        
+        dict_gantt = {'name':self.name,
+                      'tasks': tasks}
+        with open("test.json",'w') as f:
+            json.dump(obj=dict_gantt,
+                      fp=f,
+                      ensure_ascii=False)
+
+    
+
+        
 
     
         
