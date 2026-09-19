@@ -1,3 +1,4 @@
+from __future__ import annotations
 from datetime import date, timedelta
 from typing import Literal
 from collections import namedtuple
@@ -41,12 +42,12 @@ class Task:
             self.name = name
 
         if not cat_id:
-            raise ValueError("Task category ID cannot be empty.")
+            raise ValueError("The category part of the task ID cannot be empty.")
         else:
             self.cat_id = cat_id
 
-        if not num_id:
-            raise ValueError("Task number ID cannot be empty.")
+        if num_id is None:
+            raise ValueError("The number part of the task ID cannot be empty.")
         else:
             self.num_id = num_id
 
@@ -124,51 +125,53 @@ class Task:
         if self.date_start:
             prim_start = self.date_start
         if self.typ_dep_start == key_ss:
-            if self.dep_start.date_start:
-                temp_prim_start = self.dep_start.date_start + self.lag_start
-                prim_start = temp_prim_start
+            if self.dep_start.date_start_calcd:
+                prim_start = self.dep_start.date_start_calcd + self.lag_start
                 # if prim_start is None or temp_prim_start < prim_start:
                 #     prim_start = temp_prim_start
             else:
                 prim_start = None
         elif self.typ_dep_start == key_fs:
-            if self.dep_start.date_fin:
-                temp_prim_start = self.dep_start.date_fin + self.lag_start
-                prim_start = temp_prim_start
+            if self.dep_start.date_fin_calcd:
+                prim_start = self.dep_start.date_fin_calcd + self.lag_start
                 # if prim_start is None or temp_prim_start < prim_start:
                 #     prim_start = temp_prim_start
             else:
                 prim_start = None
-        else:
-            if self.date_start is None:
-                raise RuntimeError(f'Task "{self.name}": The task has neither a dependency nor a starting date.')
+        # else:
+        #     if self.date_start is None:
+        #         raise RuntimeError(f'Task "{self.name}": The task has neither a dependency nor a starting date.')
 
         #end
         if self.date_fin:
             prim_fin = self.date_fin
         if self.typ_dep_fin == key_sf:
-            if self.dep_fin.date_start:
-                temp_prim_fin = self.dep_fin.date_start - self.preempt_fin
+            if self.dep_fin.date_start_calcd:
+                temp_prim_fin = self.dep_fin.date_start_calcd - self.preempt_fin
                 if prim_fin is None or prim_fin < temp_prim_fin:    #次のタスクが始まるまで長く続けないといけない場合。
                     prim_fin = temp_prim_fin
             else:
                 prim_fin = None
         elif self.typ_dep_fin == key_ff:
-            if self.dep_fin.date_fin:
-                temp_prim_fin = self.dep_fin.date_fin - self.preempt_fin
+            if self.dep_fin.date_fin_calcd:
+                temp_prim_fin = self.dep_fin.date_fin_calcd - self.preempt_fin
                 if prim_fin is None or prim_fin < temp_prim_fin:
                     prim_fin = temp_prim_fin
             else:
                 prim_fin = None
-        else:
-            if self.date_fin is None:
-                raise RuntimeError(f'Task "{self.name}": The task has neither a dependency nor a finishing date.')
-
+        # else:
+        #     if self.date_fin is None:
+        #         raise RuntimeError(f'Task "{self.name}": The task has neither a dependency nor a finishing date.')
 
         if self.cal_days_needed and prim_start:
             temp_prim_fin = prim_start + self.cal_days_needed
             if prim_fin is None or prim_fin < temp_prim_fin:
                 prim_fin = temp_prim_fin
+
+        if self.cal_days_needed and prim_fin:
+            temp_prim_start = prim_fin - self.cal_days_needed
+            if prim_start is None:
+                prim_start = temp_prim_start
 
         changed:bool=False
         if self.date_start_calcd != prim_start or self.date_fin_calcd != prim_fin:
@@ -239,10 +242,10 @@ class Task:
         focus:Task = self
         while True:
             focus = focus.dep_start
-            checked.append(focus)
             if focus is None:
                 break
-            elif focus == self:
+            checked.append(focus)
+            if focus == self:
                 circle = self.__list_linerize(checked)
                 raise RuntimeWarning(f'Circular referencing in dependency series for starting:\n{circle}')
             else:
@@ -250,19 +253,20 @@ class Task:
         focus = self
         while True:
             focus = focus.dep_fin
-            checked.append(focus)
             if focus is None:
                 break
-            elif focus == self:
+            checked.append(focus)
+            if focus == self:
                 circle = self.__list_linerize(checked)
-                raise RuntimeWarning(f'Circular referencing in dependency series for starting:\n{circle}')
+                raise RuntimeWarning(f'Circular referencing in dependency series for finishing:\n{circle}')
             else:
                 focus.circula_fin_ok = True
 
-    def __list_linerize(list_str:list[str])->str:
-        linearized:str=f'"{list_str[0]}"'
-        for i in range(1, len(list_str),1):
-            linearized += f'->"{list_str[i]}"'
+    @staticmethod
+    def __list_linerize(list_task:list[Task])->str:
+        linearized:str=f'"{list_task[0].name}"'
+        for i in range(1, len(list_task),1):
+            linearized += f'->"{list_task[i].name}"'
         return linearized
 
     def task_to_dict(self):
@@ -272,15 +276,15 @@ class Task:
             "owner": self.owner,
             "date_start_calcd":self.date_start_calcd.isoformat(),
             "date_fin_calcd":self.date_fin_calcd.isoformat(),
-            "calender_days_needed": self.cal_days_needed.days,
-            "name_dependency_start": self.dep_start.name,
-            "id_dependency_start": self.dep_start.id,
+            "calender_days_needed": self.cal_days_needed.days if self.cal_days_needed is not None else None,
+            "name_dependency_start": self.dep_start.name if self.dep_start is not None else None,
+            "id_dependency_start": self.dep_start.id if self.dep_start is not None else None,
             "typ_start": self.typ_dep_start,
-            "lag_start": self.lag_start.days,
-            "name_dependency_fin": self.dep_fin.name,
-            "id_dependency_fin": self.dep_fin.id,
+            "lag_start": self.lag_start.days if self.lag_start is not None else None,
+            "name_dependency_fin": self.dep_fin.name if self.dep_fin is not None else None,
+            "id_dependency_fin": self.dep_fin.id if self.dep_fin is not None else None,
             "typ_fin": self.typ_dep_fin,
-            "preempt_fin": self.preempt_fin.days,
+            "preempt_fin": self.preempt_fin.days if self.preempt_fin is not None else None,
             "description": self.description,
             "flag_delay":self.flag_delay,
 
