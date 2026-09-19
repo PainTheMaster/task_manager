@@ -90,7 +90,7 @@ class Task:
         else:
             self.typ_dep_start = typ_dep_start
 
-        self.lag_start = timedelta(days=lag_start)
+        self.lag_start = timedelta(days=lag_start if lag_start is not None else 0)
 
         self.dep_fin = dep_fin
         if dep_fin is None and typ_dep_fin is None:
@@ -105,7 +105,7 @@ class Task:
         else:
             self.typ_dep_fin = typ_dep_fin
 
-        self.preempt_fin = timedelta(days=preempt_fin)
+        self.preempt_fin = timedelta(days=preempt_fin if preempt_fin is not None else 0)
 
         self.description = description
 
@@ -321,32 +321,50 @@ class Gantt:
 
 
     def add_task(self,
-                 name:str,
-                 cat_id:str|Literal['G','T', 'M', 'Q', 'C']|None,
-                 num_id:int|None,
-                 owner:str|list[str]|None,
-                 date_start:str|date|None,
-                 date_fin:str|date|None,
-                 num_duration:int|None,
-                 unit_duration: Literal['day','week','month','year','wkg_day']|None,
-                 name_dep_start:str|None,
-                 typ_dep_start:Literal['SS', 'FS']|None,
-                 lag_start:int|None,
-                 name_dep_fin:str|None,
-                 typ_dep_fin:Literal['SF', 'FF']|None,
-                 preempt_fin:int|None,
+                 name:str=None,
+                 cat_id:str|Literal['G','T', 'M', 'Q', 'C']=None,
+                 num_id:int|None=None,
+                 owner:str|list[str]=None,
+                 date_start:str|date|None=None,
+                 date_fin:str|date|None=None,
+                 num_duration:int|None=None,
+                 unit_duration: Literal['day','week','month','year','wkg_day']|None=None,
+                 name_dep_start:str|None=None,
+                 typ_dep_start:Literal['SS', 'FS']|None=None,
+                 lag_start:int|None=None,
+                 name_dep_fin:str|None=None,
+                 typ_dep_fin:Literal['SF', 'FF']|None=None,
+                 preempt_fin:int|None=None,
                  description:str|None=None
                  ):
         if not name:
             raise ValueError("Task name cannot be empty.")
         
         if not cat_id:
-            raise ValueError("Task category ID cannot be empty.")
+            raise ValueError(f'Task "{self.name}": Task category ID cannot be empty.')
         elif cat_id not in self.counter_dict:
-            raise ValueError(f"Invalid task category ID: {cat_id}")
+            raise ValueError(f'Task "{self.name}": Invalid task category ID "{cat_id}"')
         if num_id is None:
             self.counter_dict[cat_id] += 1
             num_id = self.counter_dict[cat_id]
+
+        if date_start is None:
+            pass
+        elif isinstance(date_start, str):
+            date_start = date.fromisoformat(date_start)
+        elif isinstance(date_start, date):
+            pass
+        else:
+            raise ValueError(f'Task "{self.name}": invalid starting date input form "{date_start}"')
+
+        if date_fin is None:
+            pass
+        elif isinstance(date_fin, str):
+            date_fin = date.fromisoformat(date_fin)
+        elif isinstance(date_fin, date):
+            pass
+        else:
+            raise ValueError(f'Task "{self.name}": invalid finishing date input form "{date_fin}"')
 
         if not owner:
             raise ValueError("Task owner cannot be empty.")
@@ -405,11 +423,11 @@ class Gantt:
         return None
 
 
-    def check_circular(self, task_this:Task):
-        list_checked:list[Task]=[task_this]
-        if not task_this.circular_start_ok:
-            pass
-        pass
+    # def check_circular(self, task_this:Task):
+    #     list_checked:list[Task]=[task_this]
+    #     if not task_this.circular_start_ok:
+    #         pass
+    #     pass
 
     def link(self):
         max = 1
@@ -457,7 +475,7 @@ class Gantt:
         
         dict_gantt = {'name':self.name,
                       'tasks': tasks}
-        with open("test.json",'w') as f:
+        with open(file="test.json",mode='w',encoding='utf-8') as f:
             json.dump(obj=dict_gantt,
                       fp=f,
                       ensure_ascii=False)
