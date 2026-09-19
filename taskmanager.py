@@ -482,7 +482,13 @@ class Gantt:
 
     
 
-        
+    class CounterCategory:
+        def __init__(self, cats: list[str]=None):
+            self.used = {}
+            for cat in cats:
+                self.dict_cat[cat] = [(-1,-1)]
+            
+
 
     
         
