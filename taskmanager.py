@@ -313,6 +313,13 @@ class Gantt:
                                              'Q':-1,
                                              'C':-1,
                                             }
+        self.counter_dict_tuple: dict[str, list[tuple[int, int]]]={
+            'G':[(-1,-1)],
+            'T':[(-1,-1)],
+            'M':[(-1,-1)],
+            'Q':[(-1,-1)],
+            'C':[(-1,-1)]
+        }
 
         #tuple_dep_fin = (name, name_dep_fin, typ_dep_fin)
         # self.dependency = namedtuple('dependecy', ['name_this', 'name_dep'])
@@ -343,11 +350,12 @@ class Gantt:
         
         if not cat_id:
             raise ValueError(f'Task "{self.name}": Task category ID cannot be empty.')
-        elif cat_id not in self.counter_dict:
-            raise ValueError(f'Task "{self.name}": Invalid task category ID "{cat_id}"')
-        if num_id is None:
-            self.counter_dict[cat_id] += 1
-            num_id = self.counter_dict[cat_id]
+        # elif cat_id not in self.counter_dict:
+        #     raise ValueError(f'Task "{self.name}": Invalid task category ID "{cat_id}"')
+        # if num_id is None:
+        #     # self.counter_dict[cat_id] += 1
+        #     # num_id = self.counter_dict[cat_id]
+        num_id = self.manage_num_id(cat_id=cat_id, num_id=num_id)
 
         if date_start is None:
             pass
@@ -417,6 +425,65 @@ class Gantt:
                 tuple_dep_fin = dependency(name_this=name, name_dep=name_dep_fin, typ_dep=typ_dep_fin)
                 self.dep_fin.append(tuple_dep_fin)
 
+    def manage_num_id(self,
+                      cat_id:str|Literal['G','T', 'M', 'Q', 'C']=None,
+                      num_id:int|None=None
+                      )->int:
+        if cat_id not in self.counter_dict_tuple:
+            self.counter_dict_tuple[cat_id] = [(-1,-1)]
+
+        if num_id is None:
+            list_tuple = self.counter_dict_tuple[cat_id]
+            last = list_tuple[-1]
+            num_next = last[1]+1
+            list_tuple[-1] = (last[0], num_next)
+            return num_next
+        else:
+            list_tuple = self.counter_dict_tuple[cat_id]
+            for i in range(len(list_tuple)):
+                if i == len(list_tuple)-1:
+                    tuple_left = list_tuple[i]
+                    if num_id <= tuple_left[1]+1:
+                        list_tuple[i] = (tuple_left[0], tuple_left[1]+1)
+                        return tuple_left[1]+1
+                    else:
+                        list_tuple.append((num_id, num_id))
+                        return num_id
+                
+                tuple_left = list_tuple[i]
+                tuple_right = list_tuple[i+1]
+                if num_id <= tuple_left[1] and num_id < tuple_right[0]:
+                    if tuple_left[1]+2 == tuple_right[0]:
+                        list_tuple.pop(i+1)
+                        list_tuple[i]=(tuple_left[0], tuple_right[1])
+                        return tuple_left[1]+1
+                    else:
+                        list_tuple[i]=(tuple_left[0], tuple_left[1]+1)
+                        return tuple_left[1]+1
+                elif tuple_left[1] < num_id and num_id < tuple_right[0]:
+                    if tuple_left[1]+1 == tuple_right[0]-1:
+                        list_tuple.pop(i+1)
+                        list_tuple[i]=(tuple_left[0], tuple_right[1])
+                        return tuple_left[1]+1
+                    elif tuple_left[1]+1 == num_id:
+                        list_tuple[i] = (tuple_left[0], tuple_left[1]+1)
+                        return tuple_left[1]+1
+                    elif num_id == tuple_right[0]-1:
+                        list_tuple[i+1] = (tuple_right[0]-1, tuple_right[1])
+                        return tuple_right[0]-1
+                    else:
+                        list_tuple.insert(i+1, (num_id, num_id))
+                        return num_id
+
+    def max_num_id(self)->int:
+        max = -1
+        for key in self.counter_dict_tuple:
+            list_tuple = self.counter_dict_tuple[key]
+            tuple_last = list_tuple[-1]
+            max = tuple_last[1] if max < tuple_last[1] else max
+        return max               
+
+
     def find_by_name(self, name_dep:str)->Task:
         for task in self.tasks:
             if task.name == name_dep and not task.is_sub:
@@ -432,9 +499,8 @@ class Gantt:
 
     def link(self):
         max = 1
-        for cat in self.counter_dict:
-            if self.counter_dict[cat] > max:
-                max = self.counter_dict[cat]
+        if max < self.max_num_id():
+            max = self.max_num_id()
         id_digit = math.floor(math.log10(max))+1
         if id_digit < id_digit_default:
             id_digit = id_digit_default

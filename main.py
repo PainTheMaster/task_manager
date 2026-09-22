@@ -5,6 +5,7 @@ import graphic
 gantt = Gantt(name='gantt')
 
 gantt.add_task(name=(plan:='Plan'),
+               num_id=100,
                cat_id="G",
                owner='ぼく',
                date_start='2026-09-19',
@@ -13,6 +14,7 @@ gantt.add_task(name=(plan:='Plan'),
                description='しっかり考える')
 gantt.add_task(name='Do',
                cat_id='G',
+               num_id=100,
                owner='ぼく',
                name_dep_start=plan,
                typ_dep_start='FS',
@@ -21,6 +23,7 @@ gantt.add_task(name='Do',
                description='Just do it!')
 gantt.add_task(name=check,
                cat_id='G',
+               num_id=100,
                owner='ぼく',
                date_start='2026-10-26',
                num_duration=1,
