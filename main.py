@@ -1,6 +1,8 @@
 from taskmanager import Gantt
+import graphic
 
-gantt = Gantt(name='test')
+
+gantt = Gantt(name='gantt')
 
 gantt.add_task(name=(plan:='Plan'),
                cat_id="G",
@@ -25,5 +27,27 @@ gantt.add_task(name=check,
                unit_duration='week',
                description='Check what you have done.')
 
+
+gantt.add_task(name='Procurement',
+               cat_id='T',
+               owner='MSAT',
+               date_start='2026-09-22',
+               num_duration=1,
+               unit_duration='month',
+            #    typ_dep_fin='SF',
+            #    name_dep_fin='Test',
+               description='Procurement of the raw materials')
+
+gantt.add_task(name='Testing',
+               cat_id='Q',
+               owner='MSAT',
+               date_fin='2026-10-15',
+               num_duration=1,
+               unit_duration='month',
+               typ_dep_start='FS',
+               name_dep_start='Procurement',
+               description='Acceptance test of the prcured RMs.')
+
 gantt.link()
 
+graphic.main()

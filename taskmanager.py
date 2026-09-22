@@ -276,7 +276,7 @@ class Task:
             "owner": self.owner,
             "date_start_calcd":self.date_start_calcd.isoformat(),
             "date_fin_calcd":self.date_fin_calcd.isoformat(),
-            "calender_days_needed": self.cal_days_needed.days if self.cal_days_needed is not None else None,
+            "calendar_days_needed": self.cal_days_needed.days if self.cal_days_needed is not None else None,
             "name_dependency_start": self.dep_start.name if self.dep_start is not None else None,
             "id_dependency_start": self.dep_start.id if self.dep_start is not None else None,
             "typ_start": self.typ_dep_start,
@@ -287,6 +287,7 @@ class Task:
             "preempt_fin": self.preempt_fin.days if self.preempt_fin is not None else None,
             "description": self.description,
             "flag_delay":self.flag_delay,
+            "is_sub": self.is_sub,
 
             "details":{
                 "cat_id":self.cat_id,
@@ -475,7 +476,7 @@ class Gantt:
         
         dict_gantt = {'name':self.name,
                       'tasks': tasks}
-        with open(file="test.json",mode='w',encoding='utf-8') as f:
+        with open(file="gantt.json",mode='w',encoding='utf-8') as f:
             json.dump(obj=dict_gantt,
                       fp=f,
                       ensure_ascii=False)
