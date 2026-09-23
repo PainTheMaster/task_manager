@@ -376,14 +376,25 @@ def get_dependency_points(
         depended: pd.Series,
         relation: str|None
 )->tuple[pd.Timestamp, pd.Timestamp]:
+
+    if not pd.isna(this[key_lag_start]):
+        lag_days = pd.Timedelta(days=int(this[key_lag_start]))
+    else:
+        lag_days = pd.Timedelta(days=0)
+
+    if not pd.isna(this[key_preempt_fin]):
+        preempt_days = pd.Timedelta(days=int(this[key_preempt_fin]))
+    else:
+        preempt_days = pd.Timedelta(days=0)
+    
     if relation == key_fs:
-        return depended[key_date_fin_calc], this[key_date_start_calc]
+        return depended[key_date_fin_calc], this[key_date_start_calc]-lag_days
     elif relation == key_ss:
-        return depended[key_date_start_calc], this[key_date_start_calc]
+        return depended[key_date_start_calc], this[key_date_start_calc]-lag_days
     elif relation == key_sf:
-        return depended[key_date_start_calc], this[key_date_fin_calc]
+        return depended[key_date_start_calc], this[key_date_fin_calc]+preempt_days
     elif relation==key_ff:
-        return depended[key_date_fin_calc], this[key_date_fin_calc]
+        return depended[key_date_fin_calc], this[key_date_fin_calc]+preempt_days
     else:
         raise ValueError(f'Undefined dependency type "{relation}".')
     
@@ -676,6 +687,58 @@ def make_gantt_chart(
     return fig
 
 
+def build_today_line_script(line_color:str="#D62728",
+                            label:str='Today')->str:
+    """
+    Builds a JavaScript snippet for Plotly's post_script that draws a vertical line at today's date as seen by the browser that opens the HTML file.
+    Because this runs client-side, the "today" it uses is always the date on which the viewer opens the page. recalculated every time the page loads.
+
+    The '{plot_id}' placeholder is filled in by Poltly's 'write_html' with the id of the chart's div element.
+    """
+
+    return r"""
+    (function() {
+        var gd = document.getElementById('{plot_id}');
+        if (!gd) {return;}
+
+        var now = new Date();
+        var y = now.getFullYear();
+        var m = String(now.getMonth()+1).padStart(2, '0');
+        var d = String(now.getDate()).padStart(2, '0');
+        var todayStr = y + '-'+ m + '-' + d;
+
+        var shapes = (gd.layout && gd.layout.shapes) ? gd.layout.shapes.slice() : [];
+        shapes.push({
+            type: 'line',
+            xref: 'x',
+            yref: 'paper',
+            x0: todayStr,
+            x1: todayStr,
+            y0:0,
+            y1:1,
+            line:{color:'"""+line_color+r"""', width: 2, dash: 'dot'},
+            layer:'above'
+        });
+
+        var annotations = (gd.layout && gd.layout.annotations) ? gd.layout.annotations.slice() : [];
+        annotations.push({
+            x: todayStr,
+            y: 1,
+            yref: 'paper',
+            xref: 'x',
+            text: '"""+label+r"""'+' '+todayStr,
+            showarrow: false,
+            xanchor: 'left',
+            yanchor: 'bottom',
+            font: {color: '""" + line_color + r"""', size: 10}
+        });
+
+        Plotly.relayout(gd, {shapes: shapes, annotations: annotations});
+    
+    })();
+"""
+
+
 
 def main()->None:
     input_json = Path("gantt.json")
@@ -687,7 +750,8 @@ def main()->None:
         file=output_html,
         include_plotlyjs=True,
         full_html=True,
-        auto_open=False
+        auto_open=False,
+        post_script=[build_today_line_script()]
     )
     print('The Gantt chart is out put.')
 
