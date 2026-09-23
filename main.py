@@ -53,6 +53,37 @@ gantt.add_task(name='Testing',
                name_dep_start='Procurement',
                description='Acceptance test of the prcured RMs.')
 
+
+gantt.add_task(name='Task1',
+               cat_id='T',
+               date_start='2026-10-01',
+               num_duration=1,
+               unit_duration='month',
+               owner='ぼく',
+               description='Task1 description'
+               )
+
+gantt.add_task(name='Task2',
+               cat_id='T',
+               name_dep_start='Task1',
+               typ_dep_start='FS',
+               num_duration=1,
+               unit_duration='month',
+               owner='ぼく',
+               date_fin='2026-11-07',
+               description='Task2 description'
+               )
+
+gantt.add_task(name='Task3',
+               cat_id='T',
+               name_dep_start='Task2',
+               typ_dep_start='FS',
+               num_duration=2,
+               unit_duration='week',
+               owner='ぼく',
+               description='Task2 description'
+               )
+
 gantt.link()
 
 graphic.main()
