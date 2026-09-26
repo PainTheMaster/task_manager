@@ -581,12 +581,14 @@ def add_dependency_arrows(
 def make_gantt_chart(
         data: dict[str, Any],
         show_dependencies:bool=True,
-        show_blank:bool=True
+        show_blank:bool=True,
+        color_palette:dict[str, str]=None
 ) -> go.Figure:
     """Makes an interactive swim lane type Gantt chart."""
     df = prepare_dataframe(data)
     project_name = data.get(key_task_name, 'Gantt chart')
-    owner_colors ={
+    
+    default_owner_colors ={
         "CSK":"#0000CD",
         "MSAT":"#4169E1",
         "製造":"#ED7D31",
@@ -595,6 +597,13 @@ def make_gantt_chart(
         "業務": "#00BFFF",
         key_color_delay: '#FF0000'
     }
+
+    if color_palette:
+        owner_colors=color_palette
+        if not (key_color_delay in owner_colors):
+            owner_colors[key_color_delay] = '#FF0000'
+    else:
+        owner_colors = default_owner_colors
 
     fig = px.timeline(
         data_frame=df,
